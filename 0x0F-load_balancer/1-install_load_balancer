@@ -28,15 +28,15 @@ defaults
     timeout client 50000
     timeout server 50000
 
-frontend http_front
+frontend boltage-tech-front
     bind *:80
     stats uri /haproxy?stats
     default_backend http_back
 
-backend http_back
+backend boltage-tech-back
     balance roundrobin
-    server web-01 135158-web-01:80 check
-    server web-02 135158-web-02:80 check
+    server 135158-web-01 3.83.18.50:80 check
+    server 135158-web-02 54.237.117.200:80 check
 EOF'
 
 # Restart HAproxy service
