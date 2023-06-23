@@ -1,55 +1,49 @@
-#!/usr/bin/env bash
-# install load balancer
+#!/bin/bash
 
+# Update package lists and upgrade installed packages
+sudo apt update
+sudo apt upgrade -y
 
-echo -e "Updating and doing some minor checks...\n"
+# Install HAproxy
+sudo apt install -y haproxy
 
-function install() {
-	command -v "$1" &> /dev/null
+# Configure HAproxy to send traffic to web-01 and web-02
+sudo bash -c 'cat << EOF > /etc/haproxy/haproxy.cfg
+global
+    log /dev/log local0
+    log /dev/log local1 notice
+    chroot /var/lib/haproxy
+    stats socket /run/haproxy/admin.sock mode 660 level admin expose-fd listeners
+    stats timeout 30s
+    user haproxy
+    group haproxy
+    daemon
 
-		#shellcheck disable=SC2181
-			if [ $? -ne 0 ]; then
-					echo -e "	Installing: $1\n"
-							sudo apt-get update -y -qq && \
-										sudo apt-get install -y "$1" -qq
-												echo -e "\n"
-													else
-															echo -e "	${1} is already installed.\n"
-																fi
-																}
+defaults
+    log global
+    mode http
+    option httplog
+    option dontlognull
+    timeout connect 5000
+    timeout client 50000
+    timeout server 50000
 
-																install haproxy #install haproxy
+frontend http_front
+    bind *:80
+    stats uri /haproxy?stats
+    default_backend http_back
 
-																echo -e "\nSetting up some minor stuff.\n"
+backend http_back
+    balance roundrobin
+    server web-01 135158-web-01:80 check
+    server web-02 135158-web-02:80 check
+EOF'
 
-																# backup default server config file
-																sudo cp /etc/haproxy/haproxy.cfg haproxy_default.backup
+# Restart HAproxy service
+sudo service haproxy restart
 
-																server_config=\
-																"
-																defaults
-																  mode http
-																    timeout client 15s
-																      timeout connect 10s
-																        timeout server 15s
-																	  timeout http-request 10s
-																	  frontend abdul-malik-tech-frontend
-																	      bind *:80
-																	          default_backend abdul-malik-tech-backend
-																		  backend abdul-malik-tech-backend
-																		      balance roundrobin
-																		          server 151666-web-01 54.197.46.67:80 check
-																			      server 151666-web-02 34.239.255.12:80 check
-																			      "
+# Add current user to 'haproxy' group
+sudo usermod -aG haproxy $USER
 
-																			      # shellcheck disable=SC2154
-																			      echo "$server_config" | sudo dd status=none of=/etc/haproxy/haproxy.cfg
-
-																			      # enable haproxy to be started by init script
-																			      echo "ENABLED=1" | sudo dd status=none of=/etc/default/haproxy
-
-																			      if [ "$(pgrep -c haproxy)" -le 0 ]; then
-																			      	sudo service haproxy start
-																				else
-																					sudo service haproxy restart
-																					fi
+# Print completion message
+echo "Machine configuration completed."
